@@ -37,6 +37,7 @@ Agentry gom tất cả vào một cửa sổ, cho thấy mỗi mục tốn bao n
 - **Bên trong plugin**: mọi skill, agent, lệnh và MCP server mà plugin mang theo, mỗi thứ tốn bao nhiêu, và bạn thực sự đã dùng những gì. Plugin lớn thường tốn hàng chục nghìn token chỉ để bạn dùng vài phần.
 - **Dọn một chạm**: bản plugin cũ còn sót trong cache, và marketplace không còn plugin nào dùng.
 - **Bật/tắt plugin Claude Code** mà không cần gỡ.
+- **Copy báo cáo**: bản tóm tắt Markdown về bộ cài của bạn (tổng số, dung lượng dọn được, thứ tốn context nhất) để chia sẻ. Không kèm đường dẫn file.
 - **Bảng chi tiết**: mục nằm ở đâu, xóa sẽ làm gì, và xem trước nội dung file.
 - **Tiếng Anh và tiếng Việt**, giao diện sáng và tối.
 

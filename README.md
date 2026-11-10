@@ -37,6 +37,7 @@ Agentry puts all of it in one window, shows what each item costs, and removes it
 - **What's inside a plugin**: every skill, agent, command and MCP server it brings, what each costs, and which ones you have actually used. Big plugins often cost tens of thousands of tokens for a handful of parts in use.
 - **One-click cleanup**: old plugin versions left in the cache, and marketplaces no installed plugin comes from.
 - **Turn Claude Code plugins on or off** without uninstalling them.
+- **Copy report**: a Markdown summary of your setup (totals, reclaimable space, biggest context costs) to share. File paths are left out.
 - **Inspector**: where an item lives, what removing it will do, and a preview of the file.
 - **English and Vietnamese**, light and dark mode.
 
