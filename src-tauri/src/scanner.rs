@@ -18,15 +18,16 @@ pub struct PluginInventory {
     pub skills: usize,
     pub agents: usize,
     pub commands: usize,
+    pub mcp: usize,
     pub hooks: usize,
 }
 
 impl PluginInventory {
     pub fn notes(&self) -> Vec<Note> {
-        if self.skills + self.agents + self.commands + self.hooks == 0 {
+        if self.skills + self.agents + self.commands + self.mcp + self.hooks == 0 {
             return vec![];
         }
-        vec![Note::Contents { skills: self.skills, agents: self.agents, commands: self.commands, hooks: self.hooks }]
+        vec![Note::Contents { skills: self.skills, agents: self.agents, commands: self.commands, mcp: self.mcp, hooks: self.hooks }]
     }
 }
 
@@ -261,16 +262,41 @@ impl Scanner {
 
     // MARK: plugins
 
-    /// Counts what a plugin folder adds to the context, using the default layout (skills/, agents/, commands/, hooks/).
+    /// The skills, agents, commands and MCP servers inside a plugin folder (default layout).
+    pub fn plugin_components(&self, root: &Path) -> Vec<Item> {
+        // shortcut: custom skill/agent/command paths declared in plugin.json are not followed (hooks and MCP are).
+        let mut parts = self.skills(&root.join("skills"), "");
+        parts.extend(self.markdown_items(&root.join("agents"), Kind::Subagent, "", &["md"]));
+        parts.extend(self.markdown_items(&root.join("commands"), Kind::Command, "", &["md"]));
+        // MCP servers come from .mcp.json and/or plugin.json "mcpServers" (an object or a path to one).
+        let mut servers: Vec<String> = Vec::new();
+        let mut add = |config: Option<Value>| {
+            if let Some(Value::Object(map)) = config.map(|c| c.get("mcpServers").cloned().unwrap_or(c)) {
+                servers.extend(map.into_iter().filter(|(_, v)| v.is_object()).map(|(k, _)| k));
+            }
+        };
+        add(read_json(&root.join(".mcp.json")));
+        match plugin_manifest(root).and_then(|m| m.get("mcpServers").cloned()) {
+            Some(Value::String(path)) => add(read_json(&join_rel(root, path.trim_start_matches("./")))),
+            Some(inline @ Value::Object(_)) => add(Some(serde_json::json!({ "mcpServers": inline }))),
+            _ => {}
+        }
+        servers.sort();
+        servers.dedup();
+        parts.extend(servers.into_iter().map(|name| {
+            Item::new("", Kind::Mcp, name, Some(root.to_path_buf()), Removal::Manual { file: root.to_path_buf() })
+        }));
+        parts
+    }
+
+    /// Counts what a plugin folder adds to the context.
     pub fn plugin_inventory(&self, root: &Path) -> PluginInventory {
-        // shortcut: custom skill/agent/command paths declared in plugin.json are not followed (hooks are).
-        let skills = self.skills(&root.join("skills"), "");
-        let agents = self.markdown_items(&root.join("agents"), Kind::Subagent, "", &["md"]);
-        let commands = self.markdown_items(&root.join("commands"), Kind::Command, "", &["md"]);
+        let parts = self.plugin_components(root);
+        let count = |kind: Kind| parts.iter().filter(|p| p.kind == kind).count();
         let mut events = BTreeMap::new();
         let mut hook_files = vec![root.join("hooks").join("hooks.json"), root.join("hooks.json")];
         // plugin.json can also declare hooks: inline, as one path, or as a list of paths.
-        let manifest = read_json(&join_rel(root, ".claude-plugin/plugin.json")).or_else(|| read_json(&root.join("plugin.json")));
+        let manifest = plugin_manifest(root);
         match manifest.as_ref().and_then(|m| m.get("hooks")) {
             Some(inline @ Value::Object(_)) => collect_hooks(inline, &[], None, &mut events),
             Some(Value::String(path)) => hook_files.push(join_rel(root, path.trim_start_matches("./"))),
@@ -287,13 +313,18 @@ impl Scanner {
             }
         }
         PluginInventory {
-            tokens: skills.iter().chain(&agents).chain(&commands).map(|i| i.tokens).sum(),
-            skills: skills.len(),
-            agents: agents.len(),
-            commands: commands.len(),
+            tokens: parts.iter().map(|p| p.tokens).sum(),
+            skills: count(Kind::Skill),
+            agents: count(Kind::Subagent),
+            commands: count(Kind::Command),
+            mcp: count(Kind::Mcp),
             hooks: events.values().map(Vec::len).sum(),
         }
     }
+}
+
+fn plugin_manifest(root: &Path) -> Option<Value> {
+    read_json(&join_rel(root, ".claude-plugin/plugin.json")).or_else(|| read_json(&root.join("plugin.json")))
 }
 
 /// Finds `{"command": "..."}` objects and groups them by the event key above them.

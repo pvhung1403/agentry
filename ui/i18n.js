@@ -73,7 +73,10 @@ const dictionaries = {
       restartAfterClean: 'Restart running Claude Code sessions after cleaning.',
       folderRefs: "Removing the folder can leave references in the agent's config.",
     },
-    contents: { skills: 'skill', agents: 'agent', commands: 'command', hooks: 'hook' },
+    contents: { skills: 'skill', agents: 'agent', commands: 'command', mcp: 'MCP server', hooks: 'hook' },
+    inside: "What's inside",
+    insideSummary: '{used} of {total} used · ~{unused} of ~{all} tokens are from parts you haven’t used',
+    showAll: 'Show all {n}',
     errors: {
       toolNotFound: 'Could not find the `{tool}` command. Install it or add it to your PATH.',
       notJsonObject: 'The config file is not a JSON object, so it was not changed.',
@@ -153,7 +156,10 @@ const dictionaries = {
       restartAfterClean: 'Khởi động lại các phiên Claude Code đang chạy sau khi dọn.',
       folderRefs: 'Xóa thư mục có thể để lại tham chiếu trong config của agent.',
     },
-    contents: { skills: 'skill', agents: 'agent', commands: 'lệnh', hooks: 'hook' },
+    contents: { skills: 'skill', agents: 'agent', commands: 'lệnh', mcp: 'MCP server', hooks: 'hook' },
+    inside: 'Bên trong',
+    insideSummary: 'Đã dùng {used}/{total} · ~{unused}/~{all} token đến từ phần chưa dùng',
+    showAll: 'Hiện tất cả {n}',
     errors: {
       toolNotFound: 'Không tìm thấy lệnh `{tool}`. Hãy cài nó hoặc thêm vào PATH.',
       notJsonObject: 'File config không phải JSON object nên không bị thay đổi.',
@@ -229,7 +235,7 @@ export function formatNotes(notes) {
       case 'version':
         return `v${note.value}`;
       case 'contents':
-        return ['skills', 'agents', 'commands', 'hooks']
+        return ['skills', 'agents', 'commands', 'mcp', 'hooks']
           .filter((k) => note[k] > 0)
           .map((k) => plural(note[k], t(`contents.${k}`)))
           .join(' · ');

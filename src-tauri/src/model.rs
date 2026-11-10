@@ -50,12 +50,24 @@ pub struct Toggle {
     pub disable: Vec<String>,
 }
 
+/// One skill, agent, command or MCP server inside a plugin.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Component {
+    pub kind: Kind,
+    pub name: String,
+    pub summary: String,
+    pub tokens: u64,
+    pub tracked: bool,
+    pub last_used: Option<String>,
+}
+
 /// Facts about an item. The UI turns them into localized text.
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(tag = "code", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum Note {
     Version { value: String },
-    Contents { skills: usize, agents: usize, commands: usize, hooks: usize },
+    Contents { skills: usize, agents: usize, commands: usize, mcp: usize, hooks: usize },
     LinkTo { target: String },
     Hooks { count: usize, location: String },
     ProjectScope { project: String },

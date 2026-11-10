@@ -34,7 +34,7 @@ let items = [
   claudePlugin('devkit-pro@acme-tools', {
     lastUsed: ago(9), summary: 'Agents, skills and hooks for full-stack teams', path: `${H}/.claude/plugins/cache/acme-tools/devkit-pro/3.1.0`,
     bytes: 74 * MB, tokens: 33_400,
-    notes: [{ code: 'version', value: '3.1.0' }, { code: 'contents', skills: 312, agents: 70, commands: 96, hooks: 27 }, { code: 'usage', used: 3 }],
+    notes: [{ code: 'version', value: '3.1.0' }, { code: 'contents', skills: 312, agents: 70, commands: 96, mcp: 1, hooks: 27 }, { code: 'usage', used: 3 }],
   }),
   claudePlugin('recall@memory-labs', {
     lastUsed: ago(0.1), summary: 'Persistent memory across sessions', path: `${H}/.claude/plugins/cache/memory-labs/recall/15.2.0`,
@@ -130,6 +130,32 @@ description: Read, merge and fill PDF files
 Use this skill when the user wants to read, merge, split or fill a PDF.
 `;
 
+// Parts of two sample plugins, for the inspector's "What's inside" list.
+const partNames = {
+  skill: ['api-design', 'backend-patterns', 'code-review', 'docker-patterns', 'e2e-testing', 'frontend-patterns', 'golang-patterns', 'python-testing', 'security-review', 'tdd-workflow'],
+  subagent: ['architect', 'planner', 'build-error-resolver', 'refactor-cleaner'],
+  command: ['plan', 'review', 'build-fix'],
+  mcp: ['browser'],
+};
+
+function makeParts(counts, used) {
+  const list = [];
+  for (const [kind, n] of Object.entries(counts)) {
+    const names = partNames[kind];
+    for (let i = 0; i < n; i++) {
+      const name = i < names.length ? names[i] : `${names[i % names.length]}-${Math.floor(i / names.length) + 1}`;
+      const tokens = kind === 'mcp' ? 0 : 30 + ((i * 37) % 80);
+      list.push({ kind, name, summary: '', tokens, tracked: true, lastUsed: used[name] ?? null });
+    }
+  }
+  return list.sort((a, b) => b.tokens - a.tokens || a.name.localeCompare(b.name));
+}
+
+const mockParts = {
+  [items[0].id]: makeParts({ skill: 312, subagent: 70, command: 96, mcp: 1 }, { 'code-review': ago(9), planner: ago(15), browser: ago(2) }),
+  [items[1].id]: makeParts({ skill: 30 }, Object.fromEntries(partNames.skill.slice(0, 5).map((n, i) => [n, ago(i * 0.05)]))),
+};
+
 export const mockApi = {
   scan: async () => ({ items: structuredClone(items), historySince }),
   remove: async (ids) => {
@@ -141,5 +167,6 @@ export const mockApi = {
   },
   reveal: async () => {},
   open: async () => {},
+  components: async (id) => mockParts[id] ?? [],
   preview: async (id) => (items.find((i) => i.id === id)?.kind === 'skill' ? sampleFile : null),
 };

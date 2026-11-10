@@ -12,7 +12,7 @@ mod tests;
 mod usage;
 
 use actions::Actions;
-use model::{Item, Kind};
+use model::{Component, Item, Kind};
 use scanner::Scanner;
 use usage::Usage;
 use serde::Serialize;
@@ -25,6 +25,7 @@ struct AppState {
     home: PathBuf,
     backups: PathBuf,
     items: Mutex<Vec<Item>>,
+    usage: Mutex<Usage>,
 }
 
 impl AppState {
@@ -75,7 +76,18 @@ async fn scan(state: State<'_, AppState>) -> Result<ScanResult, String> {
         .map_err(|e| e.to_string())?;
     eprintln!("agentry: scanned {} items", items.len());
     *state.items.lock().map_err(|e| e.to_string())? = items.clone();
-    Ok(ScanResult { items, history_since: usage.since })
+    let history_since = usage.since.clone();
+    *state.usage.lock().map_err(|e| e.to_string())? = usage;
+    Ok(ScanResult { items, history_since })
+}
+
+/// What a plugin is made of, most expensive first, with when each part was last used.
+#[tauri::command]
+fn components(id: String, state: State<'_, AppState>) -> Vec<Component> {
+    let Some(item) = state.find(&[id]).into_iter().next() else { return vec![] };
+    let (Kind::Plugin, Some(root)) = (item.kind, item.path.clone()) else { return vec![] };
+    let parts = Scanner::new(state.home.clone()).plugin_components(&root);
+    state.usage.lock().map(|usage| usage.components(&item, parts)).unwrap_or_default()
 }
 
 #[tauri::command]
@@ -142,10 +154,10 @@ fn main() {
         .setup(|app| {
             let home = app.path().home_dir()?;
             let backups = app.path().app_data_dir()?.join("Backups");
-            app.manage(AppState { home, backups, items: Mutex::new(Vec::new()) });
+            app.manage(AppState { home, backups, items: Mutex::new(Vec::new()), usage: Mutex::new(Usage::default()) });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![scan, remove, set_enabled, reveal, open_item, preview])
+        .invoke_handler(tauri::generate_handler![scan, remove, set_enabled, reveal, open_item, preview, components])
         .run(tauri::generate_context!())
         .expect("error while running Agentry");
 }
