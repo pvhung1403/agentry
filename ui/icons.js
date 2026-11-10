@@ -20,6 +20,7 @@ const paths = {
   inspect: '<rect x="1.75" y="2.25" width="12.5" height="11.5" rx="1.75"/><path d="M10 2.25v11.5"/>',
   close: '<path d="m4 4 8 8M12 4l-8 8"/>',
   clock: '<circle cx="8" cy="8" r="6.25"/><path d="M8 4.5V8l2.25 1.5"/>',
+  copy: '<rect x="5.25" y="5.25" width="8.5" height="8.5" rx="1.5"/><path d="M10.75 5.25v-1.5a1.5 1.5 0 0 0-1.5-1.5h-5.5a1.5 1.5 0 0 0-1.5 1.5v5.5a1.5 1.5 0 0 0 1.5 1.5h1.5"/>',
 };
 
 export function icon(name) {

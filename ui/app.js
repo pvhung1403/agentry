@@ -119,6 +119,7 @@ function renderToolbar() {
   refresh.disabled = state.busy;
   refresh.classList.toggle('spin', state.busy);
   $('#remove').disabled = state.busy || !selectedItems().some(canRemove);
+  $('#copy-report').disabled = !state.items.length;
 }
 
 function renderSummary(list) {
@@ -320,8 +321,65 @@ function confirmRemoval(items) {
   $('#confirm').showModal();
 }
 
+/** A Markdown summary to share. Names and numbers only: no file paths, no project memory. */
+function buildReport() {
+  const items = state.items;
+  const md = (text) => String(text).replace(/\|/g, '\\|');
+  const leftovers = items.filter((i) => i.kind === 'leftover');
+  const stale = items.filter(isStale);
+  const top = items.filter((i) => sessionTokens(i) > 0).sort((a, b) => sessionTokens(b) - sessionTokens(a)).slice(0, 8);
+  return [
+    `## ${t('report.title')}`,
+    '',
+    `- ${t('report.totals', { items: items.length, disk: fmtBytes(sum(items, (i) => i.bytes)), tokens: fmtTokens(sum(items, sessionTokens)) })}`,
+    leftovers.length ? `- ${t('report.leftovers', { size: fmtBytes(sum(leftovers, (i) => i.bytes)) })}` : null,
+    stale.length ? `- ${t('report.stale', { n: stale.length })}` : null,
+    '',
+    `### ${t('report.top')}`,
+    '',
+    `| ${t('columns.name')} | ${t('columns.agent')} | ${t('columns.tokens')} | ${t('columns.lastUsed')} |`,
+    '|---|---|--:|---|',
+    ...top.map((i) => `| ${md(i.name)} | ${md(i.agent)} | ${fmtTokens(sessionTokens(i))} | ${md(lastUsedText(i))} |`),
+    '',
+    `_${t('report.footer')}: https://github.com/pvhung1403/agentry_`,
+  ]
+    .filter((line) => line !== null)
+    .join('\n');
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Some webviews block the async clipboard API; fall back to a hidden text area.
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.append(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    return ok;
+  }
+}
+
+let noticeTimer = 0;
+
+function showNotice(text) {
+  const toast = $('#toast');
+  toast.className = 'toast ok';
+  toast.innerHTML = `<h4>${esc(text)}<button type="button" data-action="dismiss" aria-label="${esc(t('dismiss'))}">${icon('close')}</button></h4>`;
+  toast.hidden = false;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => (toast.hidden = true), 4000);
+}
+
 function showFailures(failures) {
   const toast = $('#toast');
+  clearTimeout(noticeTimer);
+  toast.className = 'toast';
   toast.innerHTML = `<h4>${esc(t('failed'))}<button type="button" data-action="dismiss" aria-label="${esc(t('dismiss'))}">${icon('close')}</button></h4>
     <ul>${failures.map((f) => `<li>${f.name ? `<strong>${esc(f.name)}</strong>: ` : ''}${esc(errorText(f.message))}</li>`).join('')}</ul>`;
   toast.hidden = false;
@@ -411,6 +469,9 @@ document.addEventListener('click', (event) => {
   else if (action === 'reveal' && item) api.reveal(item.id).catch((e) => showFailures([{ name: item.name, message: e }]));
   else if (action === 'open' && item) api.open(item.id).catch((e) => showFailures([{ name: item.name, message: e }]));
   else if (action === 'dismiss') $('#toast').hidden = true;
+  else if (action === 'copy-report') {
+    copyText(buildReport()).then((ok) => (ok ? showNotice(t('copied')) : showFailures([{ name: '', message: t('copyFailed') }])));
+  }
   else if (action === 'all-parts') {
     showAllParts = true;
     renderInspector();
