@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agentry</title>
+  <link rel="icon" href="logo.svg">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand" data-tauri-drag-region>
+        <img src="logo.svg" alt="" width="34" height="34">
+        <div>
+          <div class="brand-name">Agentry</div>
+          <div class="brand-tag" data-i18n="tagline"></div>
+        </div>
+      </div>
+      <nav id="nav" aria-label="Filters"></nav>
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-lang="en">English</button>
+        <button type="button" data-lang="vi">Tiếng Việt</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="toolbar" data-tauri-drag-region>
+        <label class="search">
+          <span data-icon="search"></span>
+          <input id="search" type="search" data-i18n-placeholder="search" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="spacer" data-tauri-drag-region></div>
+        <button type="button" class="btn" id="refresh" data-i18n-title="refreshHint">
+          <span data-icon="refresh"></span><span data-i18n="refresh"></span>
+        </button>
+        <button type="button" class="btn btn-danger-ghost" id="remove" data-action="remove-selected">
+          <span data-icon="trash"></span><span data-i18n="remove"></span>
+        </button>
+      </header>
+      <section class="summary" id="summary"></section>
+      <div class="table-wrap" id="table-wrap">
+        <table>
+          <thead id="thead"></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div class="empty" id="empty" hidden></div>
+      </div>
+    </main>
+
+    <aside class="inspector" id="inspector" aria-live="polite"></aside>
+  </div>
+
+  <dialog id="confirm">
+    <h3 id="confirm-title"></h3>
+    <ul id="confirm-list"></ul>
+    <div class="dialog-buttons">
+      <button type="button" class="btn" id="confirm-cancel" data-i18n="cancel"></button>
+      <button type="button" class="btn btn-danger" id="confirm-ok" data-i18n="remove"></button>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="alert" hidden></div>
+</body>
+</html>

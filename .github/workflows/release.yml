@@ -1,0 +1,69 @@
+name: Release
+
+# Push a tag like v0.2.0 to build macOS, Windows and Linux installers into a draft GitHub release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (Universal)
+            os: macos-latest
+            args: --target universal-apple-darwin
+          - name: Windows
+            os: windows-latest
+            args: ''
+          - name: Linux
+            os: ubuntu-22.04
+            args: ''
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Agentry ${{ github.ref_name }}
+          releaseBody: |
+            Download the installer for your system below.
+
+            - **macOS**: `Agentry_*_universal.dmg` (Apple Silicon and Intel)
+            - **Windows**: `Agentry_*_x64-setup.exe` or `Agentry_*_x64_en-US.msi`
+            - **Linux**: `Agentry_*_amd64.deb` (Ubuntu / Debian), `Agentry_*_amd64.AppImage` or `Agentry-*.x86_64.rpm`
+
+            The builds are not code-signed yet. See the README for how to open them the first time.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

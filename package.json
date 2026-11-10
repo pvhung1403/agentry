@@ -1,0 +1,16 @@
+{
+  "name": "agentry",
+  "private": true,
+  "version": "0.1.0",
+  "description": "See and clean up the skills, plugins, memory and MCP servers your AI coding agents load",
+  "license": "MIT",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "icons": "tauri icon assets/logo-1024.png -o src-tauri/icons"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

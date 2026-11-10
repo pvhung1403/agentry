@@ -1,0 +1,27 @@
+[package]
+name = "agentry"
+version = "0.1.0"
+description = "See and clean up the skills, plugins, memory and MCP servers your AI coding agents load"
+authors = ["HungPV"]
+license = "MIT"
+repository = "https://github.com/pvhung1403/agentry"
+edition = "2021"
+rust-version = "1.77.2"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+# preserve_order keeps the key order of config files Agentry edits.
+serde_json = { version = "1", features = ["preserve_order"] }
+trash = "5"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
