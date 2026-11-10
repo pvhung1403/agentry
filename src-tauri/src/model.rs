@@ -60,6 +60,10 @@ pub enum Note {
     Hooks { count: usize, location: String },
     ProjectScope { project: String },
     ProjectMemory { count: usize },
+    /// How many different skills, agents or MCP servers of a plugin show up in the history.
+    Usage { used: usize },
+    /// The plugin works through hooks, which the history doesn't record, so "not used" can't be told.
+    RunsViaHooks,
     UnusedMarketplace,
     Leftover,
     RestartAfterClean,
@@ -85,6 +89,10 @@ pub struct Item {
     pub toggle: Option<Toggle>,
     pub removal: Removal,
     pub notes: Vec<Note>,
+    /// True when the agent's history says whether this item is used (Claude Code for now).
+    pub tracked: bool,
+    /// Newest use in the history, as an ISO-8601 timestamp.
+    pub last_used: Option<String>,
 }
 
 impl Item {
@@ -105,6 +113,8 @@ impl Item {
             toggle: None,
             removal,
             notes: Vec::new(),
+            tracked: false,
+            last_used: None,
         }
     }
 

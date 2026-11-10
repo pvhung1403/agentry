@@ -1,4 +1,4 @@
-import { t, getLang, setLang, fmtBytes, fmtTokens, formatNotes, removalText, errorText } from './i18n.js';
+import { t, getLang, setLang, fmtBytes, fmtTokens, fmtRelative, fmtDate, formatNotes, removalText, errorText } from './i18n.js';
 import { icon } from './icons.js';
 
 // Inside the app, talk to the Rust backend. In a plain browser, use sample data so the UI can be developed without Rust.
@@ -17,11 +17,16 @@ function tauriApi(invoke) {
 
 const KINDS = ['skill', 'plugin', 'memory', 'subagent', 'command', 'mcp', 'hook', 'marketplace', 'leftover'];
 const AGENT_ORDER = ['Claude Code', 'Codex', 'Cursor', 'Gemini CLI', 'Antigravity', 'Copilot CLI', 'Windsurf', 'Shared (~/.agents)'];
-const COLUMNS = [['name'], ['agent'], ['kind'], ['bytes', 'num'], ['tokens', 'num'], ['status']];
+// The agent name is shown under each item's name, so it needs no column of its own.
+const COLUMNS = [['name'], ['kind'], ['bytes', 'num'], ['tokens', 'num'], ['lastUsed'], ['status']];
+const NUMERIC = ['bytes', 'tokens', 'lastUsed'];
+const DAY = 86_400_000;
+const STALE_DAYS = 30;
 
 const state = {
   items: [],
-  view: 'all', // 'all' | 'kind:<kind>' | 'agent:<name>'
+  historySince: null,
+  view: 'all', // 'all' | 'unused' | 'kind:<kind>' | 'agent:<name>'
   search: '',
   sort: { key: 'bytes', dir: -1 },
   selected: new Set(),
@@ -38,11 +43,20 @@ const sum = (list, pick) => list.reduce((total, item) => total + pick(item), 0);
 const sessionTokens = (item) => (item.perSession && item.enabled !== false ? item.tokens : 0);
 const canRemove = (item) => item.removal.type !== 'manual';
 const selectedItems = () => state.items.filter((i) => state.selected.has(i.id));
+// Hooks run without leaving a trace in the history, so a hook plugin with no recorded use is not "unused".
+const viaHooks = (item) => !item.lastUsed && item.notes.some((n) => n.code === 'runsViaHooks');
+const isStale = (item) =>
+  item.tracked && !viaHooks(item) && (!item.lastUsed || Date.now() - Date.parse(item.lastUsed) > STALE_DAYS * DAY);
+// Sort key: newest first, then never used, then items the history can't see.
+const usageValue = (item) => (item.tracked && !viaHooks(item) ? (item.lastUsed ? Date.parse(item.lastUsed) : 0) : -1);
+const lastUsedText = (item) =>
+  !item.tracked ? '—' : item.lastUsed ? fmtRelative(item.lastUsed) : viaHooks(item) ? t('viaHooks') : t('notUsed');
 
 // MARK: derived data
 
 function inView(item) {
   if (state.view === 'all') return true;
+  if (state.view === 'unused') return isStale(item);
   const split = state.view.indexOf(':');
   const type = state.view.slice(0, split);
   const value = state.view.slice(split + 1);
@@ -52,7 +66,7 @@ function inView(item) {
 function visible() {
   const query = state.search.trim().toLowerCase();
   const { key, dir } = state.sort;
-  const value = (item) => (key === 'kind' ? t(`kind.${item.kind}`) : item[key]);
+  const value = (item) => (key === 'kind' ? t(`kind.${item.kind}`) : key === 'lastUsed' ? usageValue(item) : item[key]);
   return state.items
     .filter((i) => inView(i) && (!query || i.name.toLowerCase().includes(query) || i.summary.toLowerCase().includes(query)))
     .sort((a, b) => {
@@ -92,6 +106,7 @@ function renderSidebar() {
   $('#nav').innerHTML = [
     `<div class="nav-section">${esc(t('library'))}</div>`,
     row('all', t('all'), 'grid', state.items.length),
+    state.items.some((i) => i.tracked) ? row('unused', t('unused30'), 'clock', state.items.filter(isStale).length) : '',
     ...kinds.map(([k, n]) => row(`kind:${k}`, t(`kinds.${k}`), k, n)),
     agents.length ? `<div class="nav-section">${esc(t('agents'))}</div>` : '',
     ...agents.map((a) => row(`agent:${a}`, a, 'agent', state.items.filter((i) => i.agent === a).length)),
@@ -126,7 +141,8 @@ function renderTable(list) {
   $('#thead').innerHTML = `<tr>${COLUMNS.map(([key, cls = '']) => {
     const sortable = key !== 'status';
     const arrow = state.sort.key === key ? (state.sort.dir > 0 ? '▲' : '▼') : '';
-    return `<th class="${cls} ${sortable ? 'sortable' : ''}" ${sortable ? `data-sort="${key}"` : ''}>${esc(t(`columns.${key}`))}<span class="arrow">${arrow}</span></th>`;
+    const help = key === 'lastUsed' && state.historySince ? ` title="${esc(t('lastUsedHelp', { date: fmtDate(state.historySince) }))}"` : '';
+    return `<th class="${cls} ${sortable ? 'sortable' : ''}" ${sortable ? `data-sort="${key}"` : ''}${help}>${esc(t(`columns.${key}`))}<span class="arrow">${arrow}</span></th>`;
   }).join('')}</tr>`;
   $('#tbody').innerHTML = list.map(rowHTML).join('');
 
@@ -140,13 +156,16 @@ function renderTable(list) {
 }
 
 function rowHTML(item) {
+  const agent = state.view.startsWith('agent:') ? '' : `<span class="agent-tag">${esc(item.agent)}</span>`;
+  const sub = [agent, esc(item.summary)].filter(Boolean).join(' · ');
+  const usageClass = !item.tracked || viaHooks(item) ? 'muted' : isStale(item) ? 'stale' : '';
   return `<tr data-id="${esc(item.id)}" class="${state.selected.has(item.id) ? 'selected' : ''}">
     <td><div class="name-cell"><span class="kind-icon k-${item.kind}">${icon(item.kind)}</span><div class="name-text">
-      <div class="title">${esc(item.name)}</div>${item.summary ? `<div class="sub">${esc(item.summary)}</div>` : ''}</div></div></td>
-    <td class="muted">${esc(item.agent)}</td>
+      <div class="title">${esc(item.name)}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div></div></td>
     <td><span class="chip">${esc(t(`kind.${item.kind}`))}</span></td>
     <td class="num">${item.bytes ? fmtBytes(item.bytes) : '—'}</td>
     <td class="num ${sessionTokens(item) ? '' : 'muted'}">${item.tokens ? fmtTokens(item.tokens) : '—'}</td>
+    <td class="${usageClass}">${esc(lastUsedText(item))}</td>
     <td>${statusHTML(item)}</td>
   </tr>`;
 }
@@ -159,6 +178,12 @@ function statusHTML(item) {
   if (item.kind === 'leftover') return `<span class="badge warn">${esc(t('reclaimable'))}</span>`;
   if (item.notes.some((n) => n.code === 'unusedMarketplace')) return `<span class="badge">${esc(t('unused'))}</span>`;
   return '';
+}
+
+function lastUsedDetail(item) {
+  if (item.lastUsed) return `${fmtRelative(item.lastUsed)} · ${fmtDate(item.lastUsed, true)}`;
+  if (viaHooks(item)) return t('viaHooks');
+  return state.historySince ? t('notUsedSince', { date: fmtDate(state.historySince) }) : t('notUsed');
 }
 
 let previewRequest = 0;
@@ -188,6 +213,7 @@ function renderInspector() {
     <dl class="facts">
       <dt>${esc(t('size'))}</dt><dd>${item.bytes ? esc(fmtBytes(item.bytes)) : '—'}</dd>
       <dt>${esc(t('tokens'))}</dt><dd>${esc(tokens)}</dd>
+      ${item.tracked ? `<dt>${esc(t('lastUsed'))}</dt><dd class="${isStale(item) ? 'stale' : ''}">${esc(lastUsedDetail(item))}</dd>` : ''}
       ${item.path ? `<dt>${esc(t('path'))}</dt><dd class="mono">${esc(item.path)}</dd>` : ''}
       ${notes.length ? `<dt>${esc(t('notesLabel'))}</dt><dd>${notes.map(esc).join('<br>')}</dd>` : ''}
     </dl>
@@ -217,7 +243,9 @@ async function refresh() {
   state.busy = true;
   renderToolbar();
   try {
-    state.items = await api.scan();
+    const result = await api.scan();
+    state.items = result.items;
+    state.historySince = result.historySince ?? null;
   } catch (error) {
     showFailures([{ name: '', message: String(error) }]);
   }
@@ -299,8 +327,7 @@ $('#thead').addEventListener('click', (event) => {
   const th = event.target.closest('[data-sort]');
   if (!th) return;
   const key = th.dataset.sort;
-  const numeric = key === 'bytes' || key === 'tokens';
-  state.sort = state.sort.key === key ? { key, dir: -state.sort.dir } : { key, dir: numeric ? -1 : 1 };
+  state.sort = state.sort.key === key ? { key, dir: -state.sort.dir } : { key, dir: NUMERIC.includes(key) ? -1 : 1 };
   render();
 });
 

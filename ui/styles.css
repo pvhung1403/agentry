@@ -108,11 +108,13 @@ th.sortable { cursor: pointer; }
 th.sortable:hover { color: var(--text); }
 th .arrow { margin-left: 4px; font-size: 9px; }
 th:nth-child(1) { width: auto; }
-th:nth-child(2) { width: 120px; }
-th:nth-child(3) { width: 116px; }
-th:nth-child(4) { width: 88px; }
-th:nth-child(5) { width: 78px; }
+th:nth-child(2) { width: 116px; }
+th:nth-child(3) { width: 88px; }
+th:nth-child(4) { width: 78px; }
+th:nth-child(5) { width: 128px; }
 th:nth-child(6) { width: 116px; }
+.stale { color: var(--warn); }
+.agent-tag { color: var(--text); opacity: 0.7; }
 td { padding: 7px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 tbody tr { cursor: default; }
@@ -182,11 +184,11 @@ dialog li span { color: var(--muted); font-size: 12px; word-break: break-word; }
 .toast ul { margin: 0; padding-left: 18px; color: var(--muted); max-height: 200px; overflow: auto; }
 .toast button { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 2px; }
 
-/* Columns leave in order of least use: Kind (the icon shows it), then Agent (the sidebar and inspector show it). */
+/* Columns leave in order of least use: Kind (the icon shows it), then Size (the summary and inspector show it). */
 @media (max-width: 1420px) {
-  th:nth-child(3), td:nth-child(3) { display: none; }
+  th:nth-child(2), td:nth-child(2) { display: none; }
 }
 @media (max-width: 1150px) {
   .app { grid-template-columns: 210px minmax(0, 1fr) 290px; }
-  th:nth-child(2), td:nth-child(2) { display: none; }
+  th:nth-child(3), td:nth-child(3) { display: none; }
 }

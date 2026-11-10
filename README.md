@@ -33,6 +33,7 @@ Agentry puts all of it in one window, shows what each item costs, and removes it
 
 - **One list for every agent**: name, agent, kind, size on disk, estimated tokens per session, on/off state. Sort, search and multi-select.
 - **Token cost**: skill, agent and command descriptions plus always-loaded memory files (including `@imports`), so you can see which plugin eats your context.
+- **Last used**: when each Claude Code skill, subagent, command, MCP server and plugin was last used, read locally from your session history, plus a list of everything unused for 30+ days.
 - **One-click cleanup**: old plugin versions left in the cache, and marketplaces no installed plugin comes from.
 - **Turn Claude Code plugins on or off** without uninstalling them.
 - **Inspector**: where an item lives, what removing it will do, and a preview of the file.

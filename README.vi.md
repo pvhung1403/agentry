@@ -33,6 +33,7 @@ Agentry gom tất cả vào một cửa sổ, cho thấy mỗi mục tốn bao n
 
 - **Một danh sách cho mọi agent**: tên, agent, loại, dung lượng, số token ước tính mỗi phiên, trạng thái bật/tắt. Sắp xếp, tìm kiếm, chọn nhiều mục.
 - **Chi phí token**: mô tả của skill, agent, lệnh và các file memory luôn được nạp (kể cả `@import`), để bạn thấy plugin nào ngốn context.
+- **Lần dùng cuối**: mỗi skill, subagent, lệnh, MCP server và plugin của Claude Code được dùng lần cuối khi nào (đọc ngay trên máy từ lịch sử phiên), kèm danh sách những thứ không dùng 30+ ngày.
 - **Dọn một chạm**: bản plugin cũ còn sót trong cache, và marketplace không còn plugin nào dùng.
 - **Bật/tắt plugin Claude Code** mà không cần gỡ.
 - **Bảng chi tiết**: mục nằm ở đâu, xóa sẽ làm gì, và xem trước nội dung file.

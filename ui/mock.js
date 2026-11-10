@@ -2,15 +2,21 @@
 // Shapes match the Rust `Item` type exactly; values are made up.
 const H = '/Users/you';
 const MB = 1_000_000;
+const ago = (days) => new Date(Date.now() - days * 86_400_000).toISOString();
+const historySince = ago(30);
 
 function item(agent, kind, name, extra = {}) {
   const path = extra.path ?? null;
+  // Claude Code history covers skills, subagents, commands, MCP servers and plugins.
+  const tracked = agent === 'Claude Code' && ['skill', 'subagent', 'command', 'mcp', 'plugin'].includes(kind);
   return {
     id: `${agent}|${kind}|${path ?? ''}|${name}`,
     agent, kind, name,
     summary: '', path, bytes: 0, tokens: 0, perSession: true, enabled: null, toggle: null,
     removal: { type: 'trash', path },
     notes: [],
+    tracked,
+    lastUsed: null,
     ...extra,
   };
 }
@@ -26,24 +32,24 @@ const claudePlugin = (id, extra) =>
 
 let items = [
   claudePlugin('devkit-pro@acme-tools', {
-    summary: 'Agents, skills and hooks for full-stack teams', path: `${H}/.claude/plugins/cache/acme-tools/devkit-pro/3.1.0`,
+    lastUsed: ago(9), summary: 'Agents, skills and hooks for full-stack teams', path: `${H}/.claude/plugins/cache/acme-tools/devkit-pro/3.1.0`,
     bytes: 74 * MB, tokens: 33_400,
-    notes: [{ code: 'version', value: '3.1.0' }, { code: 'contents', skills: 312, agents: 70, commands: 96, hooks: 27 }],
+    notes: [{ code: 'version', value: '3.1.0' }, { code: 'contents', skills: 312, agents: 70, commands: 96, hooks: 27 }, { code: 'usage', used: 3 }],
   }),
   claudePlugin('recall@memory-labs', {
-    summary: 'Persistent memory across sessions', path: `${H}/.claude/plugins/cache/memory-labs/recall/15.2.0`,
+    lastUsed: ago(0.1), summary: 'Persistent memory across sessions', path: `${H}/.claude/plugins/cache/memory-labs/recall/15.2.0`,
     bytes: 27 * MB, tokens: 2_060,
-    notes: [{ code: 'version', value: '15.2.0' }, { code: 'contents', skills: 30, agents: 0, commands: 0, hooks: 11 }],
+    notes: [{ code: 'version', value: '15.2.0' }, { code: 'contents', skills: 30, agents: 0, commands: 0, hooks: 11 }, { code: 'usage', used: 5 }],
   }),
   claudePlugin('codemap@graph-tools', {
     summary: 'Turn any codebase into an interactive knowledge graph', path: `${H}/.claude/plugins/cache/graph-tools/codemap/2.9.0`,
     bytes: 560 * MB, tokens: 830, enabled: false,
-    notes: [{ code: 'version', value: '2.9.0' }, { code: 'contents', skills: 9, agents: 10, commands: 0, hooks: 2 }],
+    notes: [{ code: 'version', value: '2.9.0' }, { code: 'contents', skills: 9, agents: 10, commands: 0, hooks: 0 }, { code: 'usage', used: 0 }],
   }),
   claudePlugin('terse@terse', {
-    summary: 'Shorter answers, fewer tokens', path: `${H}/.claude/plugins/cache/terse/terse/4.0.1`,
+    lastUsed: ago(1), summary: 'Shorter answers, fewer tokens', path: `${H}/.claude/plugins/cache/terse/terse/4.0.1`,
     bytes: 26 * MB, tokens: 1_320,
-    notes: [{ code: 'version', value: '4.0.1' }, { code: 'contents', skills: 22, agents: 3, commands: 1, hooks: 0 }],
+    notes: [{ code: 'version', value: '4.0.1' }, { code: 'contents', skills: 22, agents: 3, commands: 1, hooks: 0 }, { code: 'usage', used: 4 }],
   }),
   item('Claude Code', 'leftover', 'recall 15.0.0.tmp', {
     path: `${H}/.claude/plugins/cache/memory-labs/recall/15.0.0.tmp`, bytes: 896 * MB,
@@ -62,7 +68,7 @@ let items = [
     removal: cli('claude', 'plugin', 'marketplace', 'remove', 'acme-tools'),
   }),
   item('Claude Code', 'skill', 'pdf-tools', {
-    summary: 'Read, merge and fill PDF files', path: `${H}/.claude/skills/pdf-tools`, bytes: 0.4 * MB, tokens: 38,
+    lastUsed: ago(6), summary: 'Read, merge and fill PDF files', path: `${H}/.claude/skills/pdf-tools`, bytes: 0.4 * MB, tokens: 38,
   }),
   item('Claude Code', 'skill', 'release-notes', {
     summary: 'Draft release notes from merged pull requests', path: `${H}/.claude/skills/release-notes`, bytes: 0.02 * MB, tokens: 24,
@@ -76,7 +82,7 @@ let items = [
     notes: [{ code: 'projectMemory', count: 6 }],
   }),
   item('Claude Code', 'mcp', 'github', {
-    summary: 'https://api.githubcopilot.com/mcp/', path: `${H}/.claude.json`,
+    lastUsed: ago(3), summary: 'https://api.githubcopilot.com/mcp/', path: `${H}/.claude.json`,
     removal: cli('claude', 'mcp', 'remove', 'github', '-s', 'user'),
   }),
   item('Claude Code', 'hook', 'PreToolUse', {
@@ -85,7 +91,7 @@ let items = [
     notes: [{ code: 'hooks', count: 1, location: 'hooks › PreToolUse' }],
   }),
   item('Claude Code', 'subagent', 'code-reviewer', {
-    summary: 'Reviews diffs for bugs and risky changes', path: `${H}/.claude/agents/code-reviewer.md`, bytes: 8_192, tokens: 22,
+    lastUsed: ago(12), summary: 'Reviews diffs for bugs and risky changes', path: `${H}/.claude/agents/code-reviewer.md`, bytes: 8_192, tokens: 22,
   }),
   item('Codex', 'memory', 'AGENTS.md', { summary: 'Prefer small, reviewed diffs', path: `${H}/.codex/AGENTS.md`, bytes: 2_048, tokens: 160 }),
   item('Codex', 'skill', 'sql-explainer', {
@@ -125,7 +131,7 @@ Use this skill when the user wants to read, merge, split or fill a PDF.
 `;
 
 export const mockApi = {
-  scan: async () => structuredClone(items),
+  scan: async () => ({ items: structuredClone(items), historySince }),
   remove: async (ids) => {
     items = items.filter((i) => !ids.includes(i.id));
     return [];

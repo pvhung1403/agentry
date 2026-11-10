@@ -263,12 +263,25 @@ impl Scanner {
 
     /// Counts what a plugin folder adds to the context, using the default layout (skills/, agents/, commands/, hooks/).
     pub fn plugin_inventory(&self, root: &Path) -> PluginInventory {
-        // shortcut: custom component paths declared in plugin.json are not followed.
+        // shortcut: custom skill/agent/command paths declared in plugin.json are not followed (hooks are).
         let skills = self.skills(&root.join("skills"), "");
         let agents = self.markdown_items(&root.join("agents"), Kind::Subagent, "", &["md"]);
         let commands = self.markdown_items(&root.join("commands"), Kind::Command, "", &["md"]);
         let mut events = BTreeMap::new();
-        for file in [root.join("hooks").join("hooks.json"), root.join("hooks.json")] {
+        let mut hook_files = vec![root.join("hooks").join("hooks.json"), root.join("hooks.json")];
+        // plugin.json can also declare hooks: inline, as one path, or as a list of paths.
+        let manifest = read_json(&join_rel(root, ".claude-plugin/plugin.json")).or_else(|| read_json(&root.join("plugin.json")));
+        match manifest.as_ref().and_then(|m| m.get("hooks")) {
+            Some(inline @ Value::Object(_)) => collect_hooks(inline, &[], None, &mut events),
+            Some(Value::String(path)) => hook_files.push(join_rel(root, path.trim_start_matches("./"))),
+            Some(Value::Array(paths)) => {
+                hook_files.extend(paths.iter().filter_map(Value::as_str).map(|p| join_rel(root, p.trim_start_matches("./"))));
+            }
+            _ => {}
+        }
+        hook_files.sort();
+        hook_files.dedup();
+        for file in hook_files {
             if let Some(json) = read_json(&file) {
                 collect_hooks(&json, &[], None, &mut events);
             }
