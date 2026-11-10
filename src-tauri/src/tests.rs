@@ -126,7 +126,7 @@ fn scans_claude_layout() {
     assert_eq!(plugin.enabled, Some(true));
     assert_eq!(
         plugin.notes,
-        vec![Note::Version { value: "2.0.0".into() }, Note::Contents { skills: 1, agents: 0, commands: 0, hooks: 1 }]
+        vec![Note::Version { value: "2.0.0".into() }, Note::Contents { skills: 1, agents: 0, commands: 0, mcp: 0, hooks: 1 }]
     );
     assert_eq!(plugin.removal, Removal::Cli { argv: vec!["claude".into(), "plugin".into(), "uninstall".into(), "tool@mkt".into()], cwd: None });
 
@@ -299,9 +299,43 @@ fn hook_only_plugins_are_not_called_unused() {
     crate::usage::Usage::read(&home.path(".claude/projects")).apply(&mut items);
     let notes = |name| find(&items, Kind::Plugin, name).unwrap().notes.clone();
 
-    assert!(notes("inline@m").contains(&Note::Contents { skills: 0, agents: 0, commands: 0, hooks: 1 }));
-    assert!(notes("listed@m").contains(&Note::Contents { skills: 0, agents: 0, commands: 0, hooks: 1 }));
+    assert!(notes("inline@m").contains(&Note::Contents { skills: 0, agents: 0, commands: 0, mcp: 0, hooks: 1 }));
+    assert!(notes("listed@m").contains(&Note::Contents { skills: 0, agents: 0, commands: 0, mcp: 0, hooks: 1 }));
     assert!(notes("inline@m").contains(&Note::RunsViaHooks));
     assert!(notes("listed@m").contains(&Note::RunsViaHooks));
     assert!(!notes("quiet@m").contains(&Note::RunsViaHooks), "skills only: really unused");
+}
+
+#[test]
+fn plugin_components_list_parts_with_last_use() {
+    let home = fixture();
+    let plugin_dir = ".claude/plugins/cache/mkt/tool/2.0.0";
+    home.write(&format!("{plugin_dir}/agents/helper.md"), "---\nname: helper\ndescription: A much longer description so this agent costs the most tokens of all\n---\n");
+    home.write(&format!("{plugin_dir}/.mcp.json"), r#"{"mcpServers": {"browser": {"command": "npx", "args": ["browser-mcp"]}}}"#);
+    home.write(
+        ".claude/projects/-tmp-proj/s.jsonl",
+        concat!(
+            r#"{"type":"assistant","timestamp":"2026-11-02T10:00:00.000Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"tool:s1"}}]}}"#, "\n",
+            r#"{"type":"assistant","timestamp":"2026-11-03T10:00:00.000Z","message":{"content":[{"type":"tool_use","name":"mcp__plugin_tool_browser__open","input":{}}]}}"#, "\n",
+        ),
+    );
+    let mut items = home.scan();
+    let usage = crate::usage::Usage::read(&home.path(".claude/projects"));
+    usage.apply(&mut items);
+    let plugin = find(&items, Kind::Plugin, "tool@mkt").unwrap().clone();
+    assert!(plugin.notes.contains(&Note::Contents { skills: 1, agents: 1, commands: 0, mcp: 1, hooks: 1 }));
+    assert!(plugin.notes.contains(&Note::Usage { used: 2 }), "one skill and one MCP server used");
+
+    let parts = usage.components(&plugin, Scanner::new(home.root.clone()).plugin_components(plugin.path.as_ref().unwrap()));
+    let summary: Vec<(String, Option<String>)> = parts.iter().map(|p| (p.name.clone(), p.last_used.clone())).collect();
+    assert_eq!(
+        summary,
+        vec![
+            ("helper".to_string(), None),
+            ("s1".to_string(), Some("2026-11-02T10:00:00.000Z".to_string())),
+            ("browser".to_string(), Some("2026-11-03T10:00:00.000Z".to_string())),
+        ],
+        "most tokens first; MCP servers cost 0 tokens here"
+    );
+    assert!(parts.iter().all(|p| p.tracked));
 }

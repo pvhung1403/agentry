@@ -12,6 +12,7 @@ function tauriApi(invoke) {
     reveal: (id) => invoke('reveal', { id }),
     open: (id) => invoke('open_item', { id }),
     preview: (id) => invoke('preview', { id }),
+    components: (id) => invoke('components', { id }),
   };
 }
 
@@ -187,6 +188,39 @@ function lastUsedDetail(item) {
 }
 
 let previewRequest = 0;
+// Plugin parts are loaded when a plugin is opened in the inspector, then kept until the next scan.
+const partsCache = new Map();
+const PARTS_SHOWN = 12;
+let showAllParts = false;
+let inspectedId = null;
+
+function partsHTML(parts) {
+  const tracked = parts.some((p) => p.tracked);
+  const used = parts.filter((p) => p.lastUsed).length;
+  const unused = sum(parts.filter((p) => p.tracked && !p.lastUsed), (p) => p.tokens);
+  const shown = showAllParts ? parts : parts.slice(0, PARTS_SHOWN);
+  const when = (p) => (!p.tracked ? '' : p.lastUsed ? fmtRelative(p.lastUsed) : t('notUsed'));
+  return `<h3>${esc(t('inside'))} <span class="muted">${parts.length}</span></h3>
+    ${tracked ? `<p class="muted small">${esc(t('insideSummary', {
+      used, total: parts.length, unused: fmtTokens(unused), all: fmtTokens(sum(parts, (p) => p.tokens)),
+    }))}</p>` : ''}
+    <ul>${shown.map((p) => `<li title="${esc(p.summary)}"><span class="kind-icon sm k-${p.kind}">${icon(p.kind)}</span>
+      <span class="part-name">${esc(p.name)}</span><span class="num muted">${p.tokens ? fmtTokens(p.tokens) : '—'}</span>
+      <span class="when ${p.tracked && !p.lastUsed ? 'stale' : 'muted'}">${esc(when(p))}</span></li>`).join('')}</ul>
+    ${parts.length > shown.length ? `<button type="button" class="btn" data-action="all-parts">${esc(t('showAll', { n: parts.length }))}</button>` : ''}`;
+}
+
+async function loadParts(item, request) {
+  let parts = partsCache.get(item.id);
+  if (!parts) {
+    parts = await api.components(item.id).catch(() => []);
+    partsCache.set(item.id, parts);
+  }
+  const el = $('#parts');
+  if (!el || request !== previewRequest || !parts.length) return;
+  el.innerHTML = partsHTML(parts);
+  el.hidden = false;
+}
 
 function renderInspector() {
   const el = $('#inspector');
@@ -204,6 +238,10 @@ function renderInspector() {
   }
 
   const item = items[0];
+  if (item.id !== inspectedId) {
+    inspectedId = item.id;
+    showAllParts = false;
+  }
   const notes = formatNotes(item.notes);
   const tokens = item.tokens ? `~${fmtTokens(item.tokens)}${item.perSession ? '' : ` (${t('projectOnly')})`}` : '—';
   el.innerHTML = `
@@ -220,6 +258,7 @@ function renderInspector() {
     ${item.path ? `<div class="row-buttons">
       <button type="button" class="btn" data-action="reveal">${icon('folder')}${esc(t('reveal'))}</button>
       <button type="button" class="btn" data-action="open">${icon('external')}${esc(t('open'))}</button></div>` : ''}
+    ${item.kind === 'plugin' ? '<section class="parts" id="parts" hidden></section>' : ''}
     <div class="danger-zone">
       <button type="button" class="btn btn-danger" data-action="remove-selected" ${canRemove(item) && !state.busy ? '' : 'disabled'}>
         ${icon('trash')}${esc(t('removeOne'))}</button>
@@ -228,6 +267,7 @@ function renderInspector() {
     <pre class="preview" id="preview" hidden></pre>`;
 
   const request = ++previewRequest;
+  if (item.kind === 'plugin') loadParts(item, request);
   api.preview(item.id).then((text) => {
     const pre = $('#preview');
     if (text && pre && request === previewRequest) {
@@ -242,6 +282,7 @@ function renderInspector() {
 async function refresh() {
   state.busy = true;
   renderToolbar();
+  partsCache.clear();
   try {
     const result = await api.scan();
     state.items = result.items;
@@ -370,6 +411,10 @@ document.addEventListener('click', (event) => {
   else if (action === 'reveal' && item) api.reveal(item.id).catch((e) => showFailures([{ name: item.name, message: e }]));
   else if (action === 'open' && item) api.open(item.id).catch((e) => showFailures([{ name: item.name, message: e }]));
   else if (action === 'dismiss') $('#toast').hidden = true;
+  else if (action === 'all-parts') {
+    showAllParts = true;
+    renderInspector();
+  }
 });
 
 $('#confirm-cancel').addEventListener('click', () => $('#confirm').close());

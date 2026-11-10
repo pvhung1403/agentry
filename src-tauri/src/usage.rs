@@ -1,4 +1,4 @@
-use crate::model::{Item, Kind, Note};
+use crate::model::{Component, Item, Kind, Note};
 use crate::specs::CLAUDE;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -66,6 +66,36 @@ impl Usage {
                 }
             }
         }
+    }
+
+    /// When one part of a plugin was last used. Claude Code names it "<plugin>:<part>",
+    /// and a plugin's MCP server "plugin_<plugin>_<server>".
+    pub fn part_last_used(&self, plugin: &str, kind: Kind, name: &str) -> Option<String> {
+        let key = match kind {
+            Kind::Skill | Kind::Command => format!("skill:{plugin}:{name}"),
+            Kind::Subagent => format!("agent:{plugin}:{name}"),
+            Kind::Mcp => format!("mcp:plugin_{plugin}_{}", tool_name(name)),
+            _ => return None,
+        };
+        self.last.get(&key).cloned()
+    }
+
+    /// The parts of a plugin, most expensive first, with when each was last used.
+    pub fn components(&self, plugin: &Item, parts: Vec<Item>) -> Vec<Component> {
+        let name = plugin_name(&plugin.name);
+        let mut list: Vec<Component> = parts
+            .into_iter()
+            .map(|part| Component {
+                last_used: if plugin.tracked { self.part_last_used(name, part.kind, &part.name) } else { None },
+                tracked: plugin.tracked,
+                kind: part.kind,
+                name: part.name,
+                summary: part.summary,
+                tokens: part.tokens,
+            })
+            .collect();
+        list.sort_by(|a, b| b.tokens.cmp(&a.tokens).then_with(|| a.name.cmp(&b.name)));
+        list
     }
 
     fn block(&mut self, block: &Value, ts: &str) {
