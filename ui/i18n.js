@@ -17,7 +17,13 @@ const dictionaries = {
     refresh: 'Refresh',
     refreshHint: 'Scan again (⌘R / Ctrl+R)',
     remove: 'Remove',
-    columns: { name: 'Name', agent: 'Agent', kind: 'Kind', bytes: 'Size', tokens: 'Tokens', status: 'Status' },
+    columns: { name: 'Name', agent: 'Agent', kind: 'Kind', bytes: 'Size', tokens: 'Tokens', lastUsed: 'Last used', status: 'Status' },
+    unused30: 'Unused 30+ days',
+    lastUsed: 'Last used',
+    notUsed: 'Not used',
+    notUsedSince: 'Not used since {date}',
+    viaHooks: 'Via hooks',
+    lastUsedHelp: 'From Claude Code session history since {date}. Other agents are not tracked yet.',
     items: 'items',
     onDisk: 'on disk',
     tokensPerSession: 'tokens loaded per session',
@@ -61,6 +67,8 @@ const dictionaries = {
       projectScope: 'Only in project {project}',
       projectMemory: '{count} memory file(s) for this project · loads only there',
       unusedMarketplace: 'No installed plugin comes from here.',
+      usage: '{used} of its skills, agents or MCP servers used in your history',
+      runsViaHooks: "Works through hooks, which the history doesn't record, so it may be in use.",
       leftover: 'Old plugin version left in the cache. Claude Code no longer uses it.',
       restartAfterClean: 'Restart running Claude Code sessions after cleaning.',
       folderRefs: "Removing the folder can leave references in the agent's config.",
@@ -89,7 +97,13 @@ const dictionaries = {
     refresh: 'Quét lại',
     refreshHint: 'Quét lại (⌘R / Ctrl+R)',
     remove: 'Xóa',
-    columns: { name: 'Tên', agent: 'Agent', kind: 'Loại', bytes: 'Dung lượng', tokens: 'Token', status: 'Trạng thái' },
+    columns: { name: 'Tên', agent: 'Agent', kind: 'Loại', bytes: 'Dung lượng', tokens: 'Token', lastUsed: 'Dùng lần cuối', status: 'Trạng thái' },
+    unused30: 'Không dùng 30+ ngày',
+    lastUsed: 'Dùng lần cuối',
+    notUsed: 'Chưa dùng',
+    notUsedSince: 'Chưa dùng từ {date}',
+    viaHooks: 'Qua hook',
+    lastUsedHelp: 'Theo lịch sử phiên Claude Code từ {date}. Chưa theo dõi các agent khác.',
     items: 'mục',
     onDisk: 'trên ổ đĩa',
     tokensPerSession: 'token nạp mỗi phiên',
@@ -133,6 +147,8 @@ const dictionaries = {
       projectScope: 'Chỉ trong dự án {project}',
       projectMemory: '{count} file memory của dự án · chỉ nạp trong dự án đó',
       unusedMarketplace: 'Không có plugin nào đã cài đến từ đây.',
+      usage: 'Đã dùng {used} skill, agent hoặc MCP của plugin trong lịch sử',
+      runsViaHooks: 'Hoạt động qua hook, mà lịch sử không ghi lại, nên có thể vẫn đang được dùng.',
       leftover: 'Bản plugin cũ còn sót trong cache. Claude Code không còn dùng.',
       restartAfterClean: 'Khởi động lại các phiên Claude Code đang chạy sau khi dọn.',
       folderRefs: 'Xóa thư mục có thể để lại tham chiếu trong config của agent.',
@@ -184,6 +200,22 @@ export function fmtBytes(bytes) {
 
 export function fmtTokens(tokens) {
   return new Intl.NumberFormat(current, { notation: 'compact', maximumFractionDigits: 1 }).format(tokens);
+}
+
+/** "3 days ago" / "3 ngày trước" */
+export function fmtRelative(iso) {
+  const seconds = (Date.parse(iso) - Date.now()) / 1000;
+  const units = [['year', 31_536_000], ['month', 2_592_000], ['week', 604_800], ['day', 86_400], ['hour', 3_600], ['minute', 60]];
+  const format = new Intl.RelativeTimeFormat(current, { numeric: 'auto' });
+  for (const [unit, size] of units) {
+    if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit);
+  }
+  return format.format(0, 'minute');
+}
+
+export function fmtDate(iso, withTime = false) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString(current, withTime ? { dateStyle: 'medium', timeStyle: 'short' } : { dateStyle: 'medium' });
 }
 
 function plural(n, word) {

@@ -234,3 +234,74 @@ fn removing_a_linked_skill_keeps_the_shared_original() {
     assert!(fs::symlink_metadata(home.path(".claude/skills/shared")).is_err(), "link removed");
     assert!(home.path(".agents/skills/shared/SKILL.md").exists(), "original kept");
 }
+
+#[test]
+fn last_used_comes_from_claude_history() {
+    let home = fixture();
+    home.write(
+        ".claude/projects/-tmp-proj/session.jsonl",
+        concat!(
+            r#"{"type":"user","timestamp":"2026-10-30T09:00:00.000Z","message":{"content":"<command-name>/demo</command-name>"}}"#, "\n",
+            r#"{"type":"assistant","timestamp":"2026-11-01T10:00:00.000Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"demo"}}]}}"#, "\n",
+            r#"{"type":"assistant","timestamp":"2026-11-02T10:00:00.000Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"tool:s1"}}]}}"#, "\n",
+            r#"{"type":"assistant","timestamp":"2026-11-03T10:00:00.000Z","message":{"content":[{"type":"tool_use","name":"Agent","input":{"subagent_type":"reviewer"}}]}}"#, "\n",
+            r#"{"type":"assistant","timestamp":"2026-11-04T10:00:00.000Z","message":{"content":[{"type":"tool_use","name":"mcp__srv__do","input":{}}]}}"#, "\n",
+        ),
+    );
+    // Subagent transcripts live in nested folders.
+    home.write(
+        ".claude/projects/-tmp-proj/abc/subagents/agent-1.jsonl",
+        r#"{"type":"assistant","timestamp":"2026-11-05T10:00:00.000Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"tool:s1"}}]}}"#,
+    );
+
+    let mut items = home.scan();
+    let usage = crate::usage::Usage::read(&home.path(".claude/projects"));
+    usage.apply(&mut items);
+    let last = |kind, name| find(&items, kind, name).and_then(|i| i.last_used.clone());
+
+    assert_eq!(usage.since.as_deref(), Some("2026-10-30T09:00:00.000Z"));
+    assert_eq!(last(Kind::Skill, "demo").as_deref(), Some("2026-11-01T10:00:00.000Z"), "newest of command + Skill tool");
+    assert_eq!(last(Kind::Subagent, "reviewer").as_deref(), Some("2026-11-03T10:00:00.000Z"));
+    assert_eq!(last(Kind::Mcp, "srv").as_deref(), Some("2026-11-04T10:00:00.000Z"));
+
+    let plugin = find(&items, Kind::Plugin, "tool@mkt").unwrap();
+    assert_eq!(plugin.last_used.as_deref(), Some("2026-11-05T10:00:00.000Z"), "plugin skill used from a subagent");
+    assert!(plugin.notes.contains(&Note::Usage { used: 1 }));
+
+    let unused = find(&items, Kind::Mcp, "local1").unwrap();
+    assert!(unused.tracked && unused.last_used.is_none());
+    assert!(items.iter().filter(|i| i.agent != "Claude Code").all(|i| !i.tracked), "only Claude Code has history");
+}
+
+#[test]
+fn hook_only_plugins_are_not_called_unused() {
+    let home = FakeHome::new();
+    let install = |name: &str| serde_json::to_string(&home.path(&format!(".claude/plugins/cache/m/{name}/1.0.0"))).unwrap();
+    home.write(
+        ".claude/plugins/installed_plugins.json",
+        &format!(
+            r#"{{"plugins": {{"inline@m": [{{"installPath": {}}}], "listed@m": [{{"installPath": {}}}], "quiet@m": [{{"installPath": {}}}]}}}}"#,
+            install("inline"),
+            install("listed"),
+            install("quiet")
+        ),
+    );
+    // Hooks declared inline in plugin.json, as a list of paths, and a plugin with skills only.
+    home.write(
+        ".claude/plugins/cache/m/inline/1.0.0/.claude-plugin/plugin.json",
+        r#"{"name": "inline", "hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "a"}]}]}}"#,
+    );
+    home.write(".claude/plugins/cache/m/listed/1.0.0/.claude-plugin/plugin.json", r#"{"name": "listed", "hooks": ["./hooks/extra.json"]}"#);
+    home.write(".claude/plugins/cache/m/listed/1.0.0/hooks/extra.json", r#"{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "b"}]}]}}"#);
+    home.write(".claude/plugins/cache/m/quiet/1.0.0/skills/s/SKILL.md", "---\nname: s\ndescription: d\n---\n");
+
+    let mut items = home.scan();
+    crate::usage::Usage::read(&home.path(".claude/projects")).apply(&mut items);
+    let notes = |name| find(&items, Kind::Plugin, name).unwrap().notes.clone();
+
+    assert!(notes("inline@m").contains(&Note::Contents { skills: 0, agents: 0, commands: 0, hooks: 1 }));
+    assert!(notes("listed@m").contains(&Note::Contents { skills: 0, agents: 0, commands: 0, hooks: 1 }));
+    assert!(notes("inline@m").contains(&Note::RunsViaHooks));
+    assert!(notes("listed@m").contains(&Note::RunsViaHooks));
+    assert!(!notes("quiet@m").contains(&Note::RunsViaHooks), "skills only: really unused");
+}

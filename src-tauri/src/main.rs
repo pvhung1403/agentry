@@ -9,10 +9,12 @@ mod scanner;
 mod specs;
 #[cfg(test)]
 mod tests;
+mod usage;
 
 use actions::Actions;
 use model::{Item, Kind};
 use scanner::Scanner;
+use usage::Usage;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -48,15 +50,32 @@ struct Failure {
     message: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScanResult {
+    items: Vec<Item>,
+    /// Oldest Claude Code history entry: "last used" can't see further back.
+    history_since: Option<String>,
+}
+
+/// Scans every agent, then marks Claude Code items with when they were last used.
+fn scan_home(home: PathBuf) -> (Vec<Item>, Usage) {
+    let scanner = Scanner::new(home);
+    let mut items = scanner.scan_all();
+    let usage = Usage::read(&scanner.rel(".claude/projects"));
+    usage.apply(&mut items);
+    (items, usage)
+}
+
 #[tauri::command]
-async fn scan(state: State<'_, AppState>) -> Result<Vec<Item>, String> {
+async fn scan(state: State<'_, AppState>) -> Result<ScanResult, String> {
     let home = state.home.clone();
-    let items = tauri::async_runtime::spawn_blocking(move || Scanner::new(home).scan_all())
+    let (items, usage) = tauri::async_runtime::spawn_blocking(move || scan_home(home))
         .await
         .map_err(|e| e.to_string())?;
     eprintln!("agentry: scanned {} items", items.len());
     *state.items.lock().map_err(|e| e.to_string())? = items.clone();
-    Ok(items)
+    Ok(ScanResult { items, history_since: usage.since })
 }
 
 #[tauri::command]
@@ -112,7 +131,9 @@ fn main() {
     // `agentry --scan-json` prints the scan, for bug reports and scripting (macOS / Linux terminals).
     if std::env::args().any(|a| a == "--scan-json") {
         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
-        println!("{}", serde_json::to_string_pretty(&Scanner::new(home).scan_all()).unwrap_or_default());
+        let (items, usage) = scan_home(home);
+        let result = ScanResult { items, history_since: usage.since };
+        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
         return;
     }
 

@@ -19,6 +19,7 @@ const paths = {
   sparkle: '<path d="M8 1.75 9.45 6.55 14.25 8 9.45 9.45 8 14.25 6.55 9.45 1.75 8 6.55 6.55Z"/>',
   inspect: '<rect x="1.75" y="2.25" width="12.5" height="11.5" rx="1.75"/><path d="M10 2.25v11.5"/>',
   close: '<path d="m4 4 8 8M12 4l-8 8"/>',
+  clock: '<circle cx="8" cy="8" r="6.25"/><path d="M8 4.5V8l2.25 1.5"/>',
 };
 
 export function icon(name) {
